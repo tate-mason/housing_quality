@@ -27,7 +27,7 @@ sys.stdout = open('data_format_output.txt', 'a')
 outPath = '../output/'
 
 # switches
-datCreate = 0 # call API and make dataset
+datCreate = 1 # call API and make dataset
 prepPerc  = 1 # make percentiles for income, gross rent, home value, own%
 prepDec   = 0 # same but deciles
 prepDum   = 0 # make race dummies
@@ -123,5 +123,3 @@ console.print(df.head())
 df.to_csv('/Volumes/TDP/housing_data/housing_sample.csv', index=False)
 
 #=== Percentile Dummies ===#
-if prepPerc:
-    
