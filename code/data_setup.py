@@ -65,8 +65,8 @@ if datCreate:
         'MET2013',    # metro area (2013 delineations)
         'URBAN',      # urban indicator
         'FARM',       # farm status
-        'OWNERSHP',  # ownership of dwelling
-        'OWNERSHPD', # detailed ownership of dwelling
+        'OWNERSHP',   # ownership of dwelling
+        'OWNERSHPD',  # detailed ownership of dwelling
         'MORTOTAL',   # total monthly mortgage
         'RENT',       # monthly contract rent
         'RENTGRS',    # monthly gross rent
@@ -122,4 +122,115 @@ console.print(df.head())
 
 df.to_csv('/Volumes/TDP/housing_data/housing_sample.csv', index=False)
 
+# function to calculate percentile/decile
+def weighted_quant_series(group, val_col, weight_col, q=100):
+    valid_mask = group[val_col].notna() & group[weight_col].notna()
+    if not valid_mask.any():
+        return pd.Series(np.nan, index=group.index)
+
+    sub = group[valid_mask].sort_values(val_col)
+
+# midpoint weight proportion
+    cum_weights  = sub[weight_col].cumsum()
+    norm_weights = (cum_weights - 0.5*sub[weight_col]) / sub[weight_col].sum()
+
+    bins = pd.cut(
+        norm_weights,
+        bins           = np.linspace(0, 1, q+1),
+        labels         = range(1, q+1),
+        include_lowest =True
+    ).astype(float)
+
+    return bins.reindex(group.index)
+
 #=== Percentile Dummies ===#
+
+if prepPerc:
+    raw_ipums_sample = pd.read_csv('/Volumes/TDP/housing_data/housing_sample.csv')
+
+    raw_ipums_sample['inc_month'] = raw_ipums_sample['inctot']/12
+    raw_ipums_sample['renter']    = ((raw_ipums_sample['ownershp']>0) & (raw_ipums_sample['ownershp']==2)).astype(int) # dummy for if renter neglecting NA
+    raw_ipums_sample['own100']    = 100*(1-raw_ipums_sample['renter'])
+
+    raw_ipums_sample['rent_inc']  = np.where(
+            raw_ipums_sample['inctot'] > 0, # has income
+            100*raw_ipums_sample['rentgrs'] / (raw_ipums_sample['inctot']/12), # rent as percent of monthly income
+            np.nan
+    )
+
+    raw_ipums_sample['hval_inc']  = np.where(
+            raw_ipums_sample['inctot'] > 0 # has income
+            raw_ipums_sample['valueh']/(raw_ipums_sample['inctot']/12), # home value as percent of monthly income
+            np.nan
+    )
+
+    gap_vars                      = ['rentgrs', 'valueh', 'own100', 'inc_month'] # defining the variables for gap regressions
+    years = raw_ipums_sample['year'].unique()
+
+
+    for v in gap_vars:
+        console.print(f'Computing {v} percentiles...')
+        df[f'pctr_{v}'] = df.groupby('year', group_keys=False).apply(
+            weighted_perc_series,
+            val_col = v,
+            weight_col = 'hhwt',
+            q = 100
+        )
+
+    raw_ipums_sample.to_csv('/Volumes/TDP/housing_data/fig2_data.csv')
+
+if prepDec:
+
+    raw_ipums_sample = pd.read_csv('/Volumes/TDP/housing_data/housing_sample.csv')
+
+    raw_ipums_sample['inc_month'] = raw_ipums_sample['inctot']/12
+    raw_ipums_sample['renter']    = ((raw_ipums_sample['ownershp']>0) & (raw_ipums_sample['ownershp']==2)).astype(int) # dummy for if renter neglecting NA
+    raw_ipums_sample['own100']    = 100*(1-raw_ipums_sample['renter'])
+
+    raw_ipums_sample['rent_inc']  = np.where(
+            raw_ipums_sample['inctot'] > 0, # has income
+            100*raw_ipums_sample['rentgrs'] / (raw_ipums_sample['inctot']/12), # rent as percent of monthly income
+            np.nan
+    )
+
+    raw_ipums_sample['hval_inc']  = np.where(
+            raw_ipums_sample['inctot'] > 0 # has income
+            raw_ipums_sample['valueh']/(raw_ipums_sample['inctot']/12), # home value as percent of monthly income
+            np.nan
+    )
+
+    gap_vars                      = ['rentgrs', 'valueh', 'own100', 'inc_month'] # defining the variables for gap regressions
+    years = raw_ipums_sample['year'].unique()
+
+
+    for v in gap_vars:
+        console.print(f'Computing {v} deciles...')
+        df[f'dec_{v}'] = df.groupby('year', group_keys=False).apply(
+            weighted_perc_series,
+            val_col = v,
+            weight_col = 'hhwt',
+            q = 10
+        )
+
+    raw_ipums_sample.to_csv('/Volumes/TDP/housing_data/tab1_data.csv')
+
+if prepDum:
+
+    fig2_sample = pd.read_csv('/Volumes/TDP/housing_data/fig2_data.csv')
+
+    fig2_sample['asian']      = fig2_sample['raced'].between(400,679).astype(int)
+    fig2_sample['chinese']    = (fig2_sample['raced'] == 400).astype(int)
+    fig2_sample['japanese']   = (fig2_sample['raced'] == 500).astype(int)
+    fig2_sample['filipino']   = (fig2_sample['raced'] == 600).astype(int)
+    fig2_sample['indian']     = (fig2_sample['raced'] == 610).astype(int)
+    fig2_sample['korean']     = (fig2_sample['raced'] == 620).astype(int)
+    fig2_sample['vietnamese'] = (fig2_sample['raced'] == 640).astype(int)
+    fig2_sample['thai']       = (fig2_sample['raced'] == 663).astype(int)
+
+    races = ['asian', 'chinese', 'japanese', 'filipino', 'indian', 'korean', 'vietnamese', 'thai']
+
+    
+
+
+
+
