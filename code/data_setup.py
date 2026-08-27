@@ -21,16 +21,16 @@ import numpy as np # numerical manipulation
 import scipy as sp # statistical manipulation
 
 # log creation
-sys.stdout = open('data_format_output.txt', 'a')
+#sys.stdout = open('data_format_output.txt', 'a')
 
 # path
 outPath = '../output/'
 
 # switches
-datCreate = 1 # call API and make dataset
-prepPerc  = 1 # make percentiles for income, gross rent, home value, own%
+datCreate = 0 # call API and make dataset
+prepPerc  = 0 # make percentiles for income, gross rent, home value, own%
 prepDec   = 0 # same but deciles
-prepDum   = 0 # make race dummies
+prepDum   = 1 # make race dummies
 
 #=== Data Call ===#
 
@@ -112,15 +112,15 @@ if datCreate:
     client.download_extract(extract, download_dir='/Volumes/TDP/housing_data')
 
 #=== Parse Extract ===#
-ddi_file  = f'/Volumes/TDP/housing_data/{extract.collection}_{str(extract.extract_id).zfill(5)}.xml'
-data_file = f'/Volumes/TDP/housing_data/{extract.collection}_{str(extract.extract_id).zfill(5)}.dat.gz'
+    ddi_file  = f'/Volumes/TDP/housing_data/{extract.collection}_{str(extract.extract_id).zfill(5)}.xml'
+    data_file = f'/Volumes/TDP/housing_data/{extract.collection}_{str(extract.extract_id).zfill(5)}.dat.gz'
 
-ddi       = readers.read_ipums_ddi(ddi_file)
-df        = readers.read_microdata(ddi, data_file)
+    ddi       = readers.read_ipums_ddi(ddi_file)
+    df        = readers.read_microdata(ddi, data_file)
 
-console.print(df.head())
+    console.print(df.head())
 
-df.to_csv('/Volumes/TDP/housing_data/housing_sample.csv', index=False)
+    df.to_csv('/Volumes/TDP/housing_data/housing_sample.csv', index=False)
 
 # function to calculate percentile/decile
 def weighted_quant_series(group, val_col, weight_col, q=100):
@@ -138,7 +138,7 @@ def weighted_quant_series(group, val_col, weight_col, q=100):
         norm_weights,
         bins           = np.linspace(0, 1, q+1),
         labels         = range(1, q+1),
-        include_lowest =True
+        include_lowest = True
     ).astype(float)
 
     return bins.reindex(group.index)
@@ -146,7 +146,8 @@ def weighted_quant_series(group, val_col, weight_col, q=100):
 #=== Percentile Dummies ===#
 
 if prepPerc:
-    raw_ipums_sample = pd.read_csv('/Volumes/TDP/housing_data/housing_sample.csv')
+    raw_ipums_sample              = pd.read_csv('/Volumes/TDP/housing_data/housing_sample.csv')
+    raw_ipums_sample.columns      = raw_ipums_sample.columns.str.lower()
 
     raw_ipums_sample['inc_month'] = raw_ipums_sample['inctot']/12
     raw_ipums_sample['renter']    = ((raw_ipums_sample['ownershp']>0) & (raw_ipums_sample['ownershp']==2)).astype(int) # dummy for if renter neglecting NA
@@ -159,29 +160,30 @@ if prepPerc:
     )
 
     raw_ipums_sample['hval_inc']  = np.where(
-            raw_ipums_sample['inctot'] > 0 # has income
+            raw_ipums_sample['inctot'] > 0, # has income
             raw_ipums_sample['valueh']/(raw_ipums_sample['inctot']/12), # home value as percent of monthly income
             np.nan
     )
 
-    gap_vars                      = ['rentgrs', 'valueh', 'own100', 'inc_month'] # defining the variables for gap regressions
-    years = raw_ipums_sample['year'].unique()
+    gap_vars = ['rentgrs', 'valueh', 'own100', 'inc_month'] # defining the variables for gap regressions
+    years    = raw_ipums_sample['year'].unique()
 
 
     for v in gap_vars:
         console.print(f'Computing {v} percentiles...')
-        df[f'pctr_{v}'] = df.groupby('year', group_keys=False).apply(
-            weighted_perc_series,
-            val_col = v,
-            weight_col = 'hhwt',
-            q = 100
+        raw_ipums_sample[f'pctr_{v}'] = raw_ipums_sample.groupby('year', group_keys=False).apply(
+            weighted_quant_series,
+            val_col     = v,
+            weight_col  = 'hhwt',
+            q           = 100
         )
 
-    raw_ipums_sample.to_csv('/Volumes/TDP/housing_data/fig2_data.csv')
+    raw_ipums_sample.to_parquet('/Volumes/TDP/housing_data/fig2_data.parquet')
 
 if prepDec:
 
-    raw_ipums_sample = pd.read_csv('/Volumes/TDP/housing_data/housing_sample.csv')
+    raw_ipums_sample              = pd.read_csv('/Volumes/TDP/housing_data/housing_sample.csv')
+    raw_ipums_sample.columns      = raw_ipums_sample.columns.str.lower()
 
     raw_ipums_sample['inc_month'] = raw_ipums_sample['inctot']/12
     raw_ipums_sample['renter']    = ((raw_ipums_sample['ownershp']>0) & (raw_ipums_sample['ownershp']==2)).astype(int) # dummy for if renter neglecting NA
@@ -194,29 +196,29 @@ if prepDec:
     )
 
     raw_ipums_sample['hval_inc']  = np.where(
-            raw_ipums_sample['inctot'] > 0 # has income
+            raw_ipums_sample['inctot'] > 0, # has income
             raw_ipums_sample['valueh']/(raw_ipums_sample['inctot']/12), # home value as percent of monthly income
             np.nan
     )
 
-    gap_vars                      = ['rentgrs', 'valueh', 'own100', 'inc_month'] # defining the variables for gap regressions
-    years = raw_ipums_sample['year'].unique()
+    gap_vars = ['rentgrs', 'valueh', 'own100', 'inc_month'] # defining the variables for gap regressions
+    years    = raw_ipums_sample['year'].unique()
 
 
     for v in gap_vars:
         console.print(f'Computing {v} deciles...')
-        df[f'dec_{v}'] = df.groupby('year', group_keys=False).apply(
-            weighted_perc_series,
+        raw_ipums_sample[f'dec_{v}'] = raw_ipums_sample.groupby('year', group_keys=False).apply(
+            weighted_quant_series,
             val_col = v,
             weight_col = 'hhwt',
             q = 10
         )
 
-    raw_ipums_sample.to_csv('/Volumes/TDP/housing_data/tab1_data.csv')
+    raw_ipums_sample.to_parquet('/Volumes/TDP/housing_data/tab1_data.parquet')
 
 if prepDum:
 
-    fig2_sample = pd.read_csv('/Volumes/TDP/housing_data/fig2_data.csv')
+    fig2_sample = pd.read_parquet('/Volumes/TDP/housing_data/tab1_data.parquet')
 
     fig2_sample['asian']      = fig2_sample['raced'].between(400,679).astype(int)
     fig2_sample['chinese']    = (fig2_sample['raced'] == 400).astype(int)
@@ -227,10 +229,31 @@ if prepDum:
     fig2_sample['vietnamese'] = (fig2_sample['raced'] == 640).astype(int)
     fig2_sample['thai']       = (fig2_sample['raced'] == 663).astype(int)
 
-    races = ['asian', 'chinese', 'japanese', 'filipino', 'indian', 'korean', 'vietnamese', 'thai']
+    races = [
+        'asian',      # overall asian indicator
+        'chinese',    # chinese indicator
+        'japanese',   # japanese indicator
+        'filipino',   # filipino indicator
+        'indian',     # indian indicator
+        'korean',     # korean indicator
+        'vietnamese', # vietnamese indicator
+        'thai'        # thai indicator
+    ] # vector of race indicators for loop
 
-    
+    ds = fig2_sample['dec_inc_month'].dropna().unique()
+    for d in ds:
+        console.print(f'decile={d}')
 
+        dummy = f'incr_d{d}'
+        fig2_sample[dummy] = np.where(
+            fig2_sample['dec_inc_month'].isna(),
+            np.nan,
+            (fig2_sample['dec_inc_month'] == d).astype(int)
+        )
 
+        for r in races:
+            console.print(f'race = {r}')
+            interaction = f'_ia_{r}_incr_d{d}'
+            fig2_sample[interaction] = fig2_sample[r] * fig2_sample[dummy]
 
-
+    fig2_sample.to_parquet('/Volumes/TDP/housing_data/tab1_reg_data.parquet')
